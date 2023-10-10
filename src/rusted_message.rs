@@ -41,7 +41,7 @@ impl RustedMessage {
             for (index, &line) in lines.iter().enumerate() {
                 let y: i32 = (index as i32) + 2 + box_y;
                 let x: i32 = (box_width - line.len() as i32) / 2;
-                ctx.outchars(x, y, line);
+                ctx.outchars(box_x + x, y, line);
             }
         } else {
             for (index, &line) in lines.iter().enumerate() {
