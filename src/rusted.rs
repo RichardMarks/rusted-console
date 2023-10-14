@@ -111,8 +111,9 @@ impl Rusted {
                 &mut wnd.buffer,
                 Coord(w, h),
                 Coord(0, 0),
-                Rect(x, y, x + w - 1, y + h - 1),
+                Rect::from_xywh(x, y, w, h),
             );
+            // println!("opening window buffer: {:?}", wnd.buffer);
         }
 
         self.set_bgcolor(bgc);
@@ -131,15 +132,18 @@ impl Rusted {
         let y: u16 = window.data[1] as u16;
         let w: u16 = window.data[2] as u16;
         let h: u16 = window.data[3] as u16;
-        let r: u16 = x + w - 1;
-        let b: u16 = y + h - 1;
+        // println!(
+        //     "closing window x {} y {} w {} h {}",
+        //     x, y, w, h,
+        // );
+        // println!("closing window buffer {:?}", window.buffer);
 
         write_console_output(
             &mut self.console,
             &window.buffer,
             Coord(w, h),
             Coord(x, y),
-            Rect(x, y, r, b),
+            Rect::from_xywh(0, 0, w, h),
         )
     }
 
@@ -273,3 +277,63 @@ impl<'a> Iterator for RustedIter<'a> {
 //     }
 //     assert!(true)
 // }
+
+#[cfg(test)]
+mod rd_console {
+    use crate::*;
+    #[test]
+    fn reads_console_output_into_buffer() {
+        let mut rusted = Rusted::new();
+        set_console_buffer_size(&mut rusted.console, Coord(5, 5));
+
+        rusted.set_fgcolor(1);
+        rusted.outchars(0, 0, "Hello");
+
+        let mut buffer = vec![CharInfo::default(); 25];
+        read_console_output(
+            &rusted.console,
+            &mut buffer,
+            Coord(5, 5),
+            Coord(0, 0),
+            Rect::from_xywh(0, 0, 5, 5),
+        );
+
+        rusted.set_fgcolor(1 | 2 | 4);
+        rusted.cls();
+
+        write_console_output(
+            &mut rusted.console,
+            &buffer,
+            Coord(5, 5),
+            Coord(0, 1),
+            Rect::from_xywh(0, 0, 5, 5),
+        );
+
+        assert_eq!(
+            vec![
+                CharInfo(' ', Attribute(7)),
+                CharInfo(' ', Attribute(7)),
+                CharInfo(' ', Attribute(7)),
+                CharInfo(' ', Attribute(7)),
+                CharInfo(' ', Attribute(7)),
+                CharInfo('H', Attribute(1)),
+                CharInfo('e', Attribute(1)),
+                CharInfo('l', Attribute(1)),
+                CharInfo('l', Attribute(1)),
+                CharInfo('o', Attribute(1)),
+            ],
+            rusted.console.buffer[0..10],
+        );
+
+        // assert_eq!(
+        //     buffer[..5],
+        //     vec![
+        //         CharInfo('H', Attribute(1)),
+        //         CharInfo('e', Attribute(1)),
+        //         CharInfo('l', Attribute(1)),
+        //         CharInfo('l', Attribute(1)),
+        //         CharInfo('o', Attribute(1)),
+        //     ]
+        // );
+    }
+}

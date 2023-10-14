@@ -13,9 +13,16 @@ pub struct Window {
     cached_buffer_size: (i32, i32),
 }
 
+// impl Drop for Window {
+//     fn drop(&mut self) {
+//         println!("*** Dropping Window {:?}", self);
+//     }
+// }
+
 impl Window {
     /// create an instance of the Window structure, allocating w * h [CharInfo] to store
     pub fn new(x: i32, y: i32, w: i32, h: i32) -> Self {
+        // println!("*** Creating Window ({},{},{},{})", x, y, w, h);
         Self {
             data: [x, y, w, h],
             buffer: vec![CharInfo::default(); (w * h) as usize],

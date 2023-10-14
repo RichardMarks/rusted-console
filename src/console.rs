@@ -1,16 +1,49 @@
+use std::fmt;
+
 use crate::constants::*;
 
-#[derive(Debug, Clone, Copy, Default)]
+/// composite of background and foreground color bitmasks
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Attribute(pub u16);
 
-#[derive(Debug, Clone, Copy, Default)]
+/// character, attribute
+#[derive(Clone, Copy, Default, PartialEq)]
 pub struct CharInfo(pub char, pub Attribute);
 
-#[derive(Debug, Clone, Copy, Default)]
+impl fmt::Debug for CharInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // write!(f, "{:032b}:{:016b}", self.0 as u32, self.1.0)
+        write!(f, "{:04X}:{:04X}", self.0 as u16, self.1 .0)
+    }
+}
+
+/// x, y
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Coord(pub u16, pub u16);
 
-#[derive(Debug, Clone, Copy, Default)]
+/// a rectangle described by the left, top, right, bottom
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Rect(pub u16, pub u16, pub u16, pub u16);
+
+impl Rect {
+    pub fn from_xywh(x: u16, y: u16, w: u16, h: u16) -> Self {
+        Self(x, y, x + w, y + h)
+    }
+
+    pub fn to_xywh(&self) -> Self {
+        Self(self.0, self.1, self.2 - self.0, self.3 - self.1)
+    }
+
+    /// gets the width of the rectangle
+    pub fn width(&self) -> u16 {
+        self.2 - self.0
+    }
+
+    /// gets the height of the rectangle
+    pub fn height(&self) -> u16 {
+        self.3 - self.1
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Console {
@@ -140,30 +173,10 @@ pub fn read_console_output(
     dst: Coord,
     src: Rect,
 ) {
-    let src_width: u16 = src.2 - src.0;
-    let src_height: u16 = src.3 - src.1;
-    for read_row in 0..src_height {
-        let dst_row: u16 = dst.1 + read_row;
-        let read_row: u16 = read_row + src.1;
-        for read_col in 0..src_width {
-            let dst_col: u16 = dst.0 + read_col;
-            let read_col: u16 = read_col + src.0;
-            let read_index: usize =
-                (read_col as usize) + ((read_row as usize) * (console.size.0 as usize));
-            let dst_index: usize =
-                (dst_col as usize) + ((dst_row as usize) * (buffer_size.0 as usize));
-            if read_index >= console.buffer.len() {
-                break;
-            }
-            if dst_index >= buffer.len() {
-                break;
-            }
-            let src_cell: &CharInfo = &console.buffer[read_index];
-            let dst_cell: &mut CharInfo = &mut buffer[dst_index];
-            dst_cell.0 = src_cell.0;
-            dst_cell.1 = src_cell.1;
-        }
-    }
+    // println!("read_console_output {:?} {:?}", src, dst);
+    let source_buffer = (&console.buffer, console.size.0, console.size.1);
+    let target_buffer = (buffer, buffer_size.0, buffer_size.1);
+    util_copy_buffer::<CharInfo>(source_buffer, target_buffer, src.to_xywh(), dst);
 }
 
 pub fn write_console_output(
@@ -173,28 +186,51 @@ pub fn write_console_output(
     dst: Coord,
     src: Rect,
 ) {
-    let src_width: u16 = src.2 - src.0;
-    let src_height: u16 = src.3 - src.1;
-    for read_row in 0..src_height {
-        let dst_row: u16 = dst.1 + read_row;
-        let read_row: u16 = read_row + src.1;
-        for read_col in 0..src_width {
-            let dst_col: u16 = dst.0 + read_col;
-            let read_col: u16 = read_col + src.0;
-            let read_index: usize =
-                (read_col as usize) + ((read_row as usize) * (buffer_size.0 as usize));
-            let dst_index: usize =
-                (dst_col as usize) + ((dst_row as usize) * (console.size.0 as usize));
-            if read_index >= buffer.len() {
+    // println!("write_console_output {:?} {:?}", src, dst);
+    let source_buffer = (buffer, buffer_size.0, buffer_size.1);
+    let target_buffer = (&mut console.buffer, console.size.0, console.size.1);
+    util_copy_buffer::<CharInfo>(source_buffer, target_buffer, src.to_xywh(), dst);
+}
+
+fn util_copy_buffer<T: Clone + std::fmt::Debug>(
+    source_buffer: (&Vec<T>, u16, u16),
+    target_buffer: (&mut Vec<T>, u16, u16),
+    src: Rect,
+    dst: Coord,
+) {
+    // println!("util_copy_buffer({:?}, {:?})", src, dst);
+
+    let (source_vec, source_width, source_height) = source_buffer;
+    let (target_vec, target_width, _target_height) = target_buffer;
+
+    let copy_width = src.2.min(source_width);
+    let copy_height = src.3.min(source_height);
+    let copy_left = src.0;
+    let copy_top = src.1;
+
+    // println!("source_width: {:?}\nsource_height: {:?}\ntarget_width: {:?}\ntarget_height: {:?}", source_width, source_height, target_width, target_height);
+    // println!("copy_width: {:?}\ncopy_height: {:?}\ncopy_left: {:?}\ncopy_top: {:?}", copy_width, copy_height, copy_left, copy_top);
+
+    for copy_row in copy_top..(copy_top + copy_height) {
+        let paste_row = dst.1 + (copy_row - copy_top);
+        for copy_col in copy_left..(copy_left + copy_width) {
+            let paste_col = dst.0 + (copy_col - copy_left);
+            let copy_index = (copy_col + (copy_row * source_width)) as usize;
+            if copy_index >= source_vec.len() {
+                // println!("@{:?},{:?} copy index out of bounds: {:?}/{:?}", copy_col, copy_row, copy_index, source_vec.len());
                 break;
             }
-            if dst_index >= console.buffer.len() {
+            let paste_index = (paste_col + (paste_row * target_width)) as usize;
+            if paste_index >= target_vec.len() {
+                // println!("@{:?},{:?} paste index out of bounds: {:?}/{:?}", paste_col, paste_row, paste_index, target_vec.len());
                 break;
             }
-            let src_cell: &CharInfo = &buffer[read_index];
-            let dst_cell: &mut CharInfo = &mut console.buffer[dst_index];
-            dst_cell.0 = src_cell.0;
-            dst_cell.1 = src_cell.1;
+            target_vec[paste_index] = source_vec[copy_index].clone();
+            // println!(
+            //     "copy {:?} from {:?}, {:?} @{:?} to {:?}, {:?} @{:?}",
+            //     source_vec[copy_index].clone(),
+            //     copy_col, copy_row, copy_index, paste_col, paste_row, paste_index
+            // );
         }
     }
 }
